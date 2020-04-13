@@ -7,6 +7,9 @@ from .output import send_combo, send_key_action, send_key, is_pressed
 
 __author__ = 'zh'
 
+from collections import namedtuple
+Window = namedtuple("Window", ["id", "wmclass"])
+
 # ============================================================ #
 
 import Xlib.display
@@ -14,30 +17,23 @@ import Xlib.display
 
 def get_active_window_wm_class(display=Xlib.display.Display()):
     """Get active window's WM_CLASS"""
-    current_window = display.get_input_focus().focus
-    pair = get_class_name(current_window)
-    if pair:
-        # (process name, class name)
-        return str(pair[1])
-    else:
-        return ""
-
-
-def get_class_name(window):
-    """Get window's class name (recursively checks parents)"""
+    window = display.get_input_focus().focus
     try:
-        wmname = window.get_wm_name()
-        wmclass = window.get_wm_class()
-        # workaround for Java app
-        # https://github.com/JetBrains/jdk8u_jdk/blob/master/src/solaris/classes/sun/awt/X11/XFocusProxyWindow.java#L35
-        if (wmclass is None and wmname is None) or "FocusProxy" in wmclass:
-            parent_window = window.query_tree().parent
-            if parent_window:
-                return get_class_name(parent_window)
-            return None
-        return wmclass
+        while True:
+            wmname = window.get_wm_name()
+            wmclass = window.get_wm_class()
+            # workaround for Java app
+            # https://github.com/JetBrains/jdk8u_jdk/blob/master/src/solaris/classes/sun/awt/X11/XFocusProxyWindow.java#L35
+            if (wmclass is None and wmname is None) or "FocusProxy" in wmclass:
+                window = window.query_tree().parent
+                if window:
+                    continue
+                break
+            return Window(wmclass=str(wmclass[1]), id=window.id)
+            break
     except:
-        return None
+        pass
+    return Window(wmclass="", id=None)
 
 # ============================================================ #
 
@@ -238,6 +234,7 @@ def define_keymap(condition, mappings, name="Anonymous keymap"):
 _mod_map = None
 _conditional_mod_map = []
 
+_ignored_windows = []
 # multipurpose keys
 # e.g, {Key.LEFT_CTRL: [Key.ESC, Key.LEFT_CTRL, Action.RELEASE]}
 _multipurpose_map = None
@@ -341,10 +338,11 @@ def on_event(event, device_name, quiet):
     key = Key(event.code)
     action = Action(event.value)
     wm_class = None
+    win_id = None
     # translate keycode (like xmodmap)
     active_mod_map = _mod_map
     if _conditional_mod_map:
-        wm_class = get_active_window_wm_class()
+        wm_class, win_id = get_active_window_wm_class()
         for condition, mod_map in _conditional_mod_map:
             params = [wm_class]
             if len(signature(condition).parameters) == 2:
@@ -361,16 +359,18 @@ def on_event(event, device_name, quiet):
         if key in _multipurpose_map:
             return
 
-    on_key(key, action, wm_class=wm_class, quiet=quiet)
+    on_key(key, action, win_id=win_id, wm_class=wm_class, quiet=quiet)
 
 
-def on_key(key, action, wm_class=None, quiet=False):
+def on_key(key, action, win_id=None, wm_class=None, quiet=False):
     if key in Modifier.get_all_keys():
         update_pressed_modifier_keys(key, action)
         send_key_action(key, action)
     elif not action.is_pressed():
         if is_pressed(key):
             send_key_action(key, action)
+    elif win_id in _ignored_windows:  # Just pass through
+        send_key_action(key, action)
     else:
         transform_key(key, action, wm_class=wm_class, quiet=quiet)
 
@@ -393,7 +393,7 @@ def transform_key(key, action, wm_class=None, quiet=False):
         is_top_level = True
         _mode_maps = []
         if wm_class is None:
-            wm_class = get_active_window_wm_class()
+            wm_class, win_id = get_active_window_wm_class()
         keymap_names = []
         for condition, mappings, name in _toplevel_keymaps:
             if (callable(condition) and condition(wm_class)) \
