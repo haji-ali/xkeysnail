@@ -8,14 +8,14 @@ from .output import send_combo, send_key_action, send_key, is_pressed
 __author__ = 'zh'
 
 from collections import namedtuple
-Window = namedtuple("Window", ["id", "wmclass"])
+Window = namedtuple("Window", ["id", "wm_class"])
 
 # ============================================================ #
 
 import Xlib.display
 
 
-def get_active_window_wm_class(display=Xlib.display.Display()):
+def get_active_window(display=Xlib.display.Display()):
     """Get active window's WM_CLASS"""
     window = display.get_input_focus().focus
     try:
@@ -29,11 +29,10 @@ def get_active_window_wm_class(display=Xlib.display.Display()):
                 if window:
                     continue
                 break
-            return Window(wmclass=str(wmclass[1]), id=window.id)
-            break
+            return Window(wm_class=str(wmclass[1]), id=window.id)
     except:
         pass
-    return Window(wmclass="", id=None)
+    return Window(wm_class="", id=None)
 
 # ============================================================ #
 
@@ -235,6 +234,8 @@ _mod_map = None
 _conditional_mod_map = []
 
 _ignored_windows = []
+unignore_combo = K("LC-F10")
+
 # multipurpose keys
 # e.g, {Key.LEFT_CTRL: [Key.ESC, Key.LEFT_CTRL, Action.RELEASE]}
 _multipurpose_map = None
@@ -243,6 +244,14 @@ _multipurpose_map = None
 # or REPEAT
 _last_key = None
 
+def toggle_ignore_cur_window():
+    wind = get_active_window();
+    ignored = wind.id in _ignored_windows
+    if ignored:
+        _ignored_windows.remove(wind.id)
+    else:
+        _ignored_windows.append(wind.id)
+    ##print("Window {:x} will be {}".format(wind.id, "NOT ignored" if ignored else "ignored"))
 
 def define_modmap(mod_remappings):
     """Defines modmap (keycode translation)
@@ -337,16 +346,15 @@ def multipurpose_handler(key, action):
 def on_event(event, device_name, quiet):
     key = Key(event.code)
     action = Action(event.value)
-    wm_class = None
-    win_id = None
+    wind = None
     # translate keycode (like xmodmap)
     active_mod_map = _mod_map
     if _conditional_mod_map:
-        wm_class, win_id = get_active_window_wm_class()
+        wind = get_active_window()
         for condition, mod_map in _conditional_mod_map:
-            params = [wm_class]
+            params = [wind.wm_class]
             if len(signature(condition).parameters) == 2:
-                params = [wm_class, device_name]
+                params = [wind.wm_class, device_name]
 
             if condition(*params):
                 active_mod_map = mod_map
@@ -359,23 +367,33 @@ def on_event(event, device_name, quiet):
         if key in _multipurpose_map:
             return
 
-    on_key(key, action, win_id=win_id, wm_class=wm_class, quiet=quiet)
+    on_key(key, action, wind=wind, quiet=quiet)
 
 
-def on_key(key, action, win_id=None, wm_class=None, quiet=False):
+def on_key(key, action, wind=None, quiet=False):
+    if wind is None:
+        wind = get_active_window();
+
     if key in Modifier.get_all_keys():
         update_pressed_modifier_keys(key, action)
         send_key_action(key, action)
     elif not action.is_pressed():
         if is_pressed(key):
             send_key_action(key, action)
-    elif win_id in _ignored_windows:  # Just pass through
-        send_key_action(key, action)
+    elif wind.id in _ignored_windows:  # Just pass through
+        combo = Combo(get_pressed_modifiers(), key)
+        # Ignore window, except if ignore key is pressed
+        if combo == unignore_combo:
+            toggle_ignore_cur_window();
+        else:
+            if not quiet:
+                print("Window 0x{:x} ignored".format(wind.id))
+            send_key_action(key, action)
     else:
-        transform_key(key, action, wm_class=wm_class, quiet=quiet)
+        transform_key(key, action, wind=wind, quiet=quiet)
 
 
-def transform_key(key, action, wm_class=None, quiet=False):
+def transform_key(key, action, wind=None, quiet=False):
     global _mode_maps
     global _toplevel_keymaps
 
@@ -392,17 +410,17 @@ def transform_key(key, action, wm_class=None, quiet=False):
         # Decide keymap(s)
         is_top_level = True
         _mode_maps = []
-        if wm_class is None:
-            wm_class, win_id = get_active_window_wm_class()
+        if wind is None:
+            wind = get_active_window()
         keymap_names = []
         for condition, mappings, name in _toplevel_keymaps:
-            if (callable(condition) and condition(wm_class)) \
-               or (hasattr(condition, "search") and condition.search(wm_class)) \
+            if (callable(condition) and condition(wind.wm_class)) \
+               or (hasattr(condition, "search") and condition.search(wind.wm_class)) \
                or condition is None:
                 _mode_maps.append(mappings)
                 keymap_names.append(name)
         if not quiet:
-            print("WM_CLASS '{}' | active keymaps = [{}]".format(wm_class, ", ".join(keymap_names)))
+            print("WM_CLASS '{}' | active keymaps = [{}]".format(wind.wm_class, ", ".join(keymap_names)))
 
     if not quiet:
         print(combo)

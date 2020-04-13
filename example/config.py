@@ -171,3 +171,9 @@ define_keymap(lambda wm_class: wm_class in ("Gnome-terminal"), {
     K("C-x"): {
         K("t"): K("C-Shift-T")}
 }, "Emacs-like keys for terminal")
+
+
+define_keymap(None, {
+    # Cursor
+    unignore_combo: toggle_ignore_cur_window,
+}, "Keymap for all windows")
