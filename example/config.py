@@ -169,7 +169,8 @@ define_keymap(lambda wm_class: wm_class in ("Gnome-terminal"), {
     K("C-Shift-j"): K("C-page_up"),
 
     K("C-x"): {
-        K("t"): K("C-Shift-T")}
+        K("t"): K("C-Shift-T"),
+        K("k"): K("C-Shift-W")}
 }, "Emacs-like keys for terminal")
 
 
