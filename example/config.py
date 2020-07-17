@@ -160,6 +160,7 @@ define_keymap(lambda wm_class: wm_class in ("Gnome-terminal"), {
     # Cursor
     K("C-t"): with_mark(K("backspace")),
     K("M-t"): with_mark(K("M-backspace")),
+    K("C-s"): "ignore",   # I don't even know why this key is needed
     K("M-w"): [K("C-Shift-c")],
     K("C-y"): [K("C-Shift-v")],
     # Cancel
