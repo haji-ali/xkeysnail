@@ -101,7 +101,7 @@ define_keymap(re.compile("Zeal"), {
 }, "Zeal")
 
 # Emacs-like keybindings in non-Emacs applications
-define_keymap(lambda wm_class: wm_class not in ("Gnome-terminal", "Emacs", "URxvt"), {
+define_keymap(lambda wm_class: wm_class not in ("Gnome-terminal", "Mate-terminal", "Emacs", "URxvt"), {
     # Cursor
     K("C-b"): with_mark(K("left")),
     K("C-f"): with_mark(K("right")),
@@ -156,7 +156,7 @@ define_keymap(lambda wm_class: wm_class not in ("Gnome-terminal", "Emacs", "URxv
 }, "Emacs-like keys")
 
 
-define_keymap(lambda wm_class: wm_class in ("Gnome-terminal"), {
+define_keymap(lambda wm_class: wm_class in ("Gnome-terminal", "Mate-terminal"), {
     # Cursor
     K("C-t"): with_mark(K("backspace")),
     K("M-t"): with_mark(K("M-backspace")),
